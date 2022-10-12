@@ -1,0 +1,73 @@
+version: '3.9'
+services:
+    apache:
+        build:
+            context: .docker/apache
+            args:
+                DEBIAN_VERSION: ${DEBIAN_VERSION}
+                DOCKER_DNS: ${DOCKER_DNS}
+                DOCKER_DIR_PROJECT: ${DOCKER_DIR_PROJECT}
+        container_name: ${DOCKER_CONTAINER_NAME}_apache
+        ports:
+            - 80:80
+            - 443:443
+        volumes:
+            - .docker/config/vhosts:/etc/apache2/sites-enabled
+            - .docker/cerbot:/home/wwwroot/ssl
+            - ./src:/var/www/${DOCKER_DIR_PROJECT}:rw
+        depends_on:
+            - php
+        environment:
+            DOCKER_DNS: ${DOCKER_DNS}
+            DOCKER_DIR_PROJECT: ${DOCKER_DIR_PROJECT}
+            DOCKER_CONTAINER_NAME: ${DOCKER_CONTAINER_NAME}
+
+    db:
+        image: ${DATABASE_MOTOR}:${DATABASE_VERSION}
+        container_name: ${DOCKER_CONTAINER_NAME}_mariadb
+        volumes:
+          - .docker/data/db:/var/lib/mysql:rw
+        command:
+          - --default-authentication-plugin=mysql_native_password
+          - --innodb_use_native_aio=0
+        ports:
+          - 3306:3306
+        environment:
+          MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
+          MYSQL_DATABASE: ${DATABASE_NAME}
+
+    php:
+        build:
+            context: .docker/php${PHP_VERSION}
+            args:
+                DOCKER_DIR_PROJECT: ${DOCKER_DIR_PROJECT}
+                NODE_VERSION: ${NODE_VERSION}
+                PHP_VERSION: ${PHP_VERSION}
+        container_name: ${DOCKER_CONTAINER_NAME}_php
+        volumes:
+            - ./src:/var/www/${DOCKER_DIR_PROJECT}:rw
+        links:
+            - db
+        depends_on:
+            - db
+        logging:
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        container_name: ${DOCKER_CONTAINER_NAME}_phpmyadmin
+        ports:
+            - 81:80
+        links:
+            - db
+        environment:
+            - PMA_HOST=db
+            - PMA_USER=root
+            - PMA_PASSWORD=${DATABASE_PASSWORD}
+    maildev:
+        image: djfarrelly/maildev
+        container_name: ${DOCKER_CONTAINER_NAME}_maildev
+        ports:
+            - 8001:80
